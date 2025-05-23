@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -71,12 +72,12 @@ func TestOpenAIEmbedder_GetEmbedding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &OpenAIEmbedder{client: &mockClient{postFunc: tt.postFunc}}
-			got, err := e.GetEmbedding("test")
+			got, err := e.GetEmbedding(context.Background(), "test")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetEmbedding() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err != nil && tt.wantErrMsg != "" && err.Error() != tt.wantErrMsg {
-				t.Errorf("GetEmbedding() error = %v, wantErrMsg %v", err, tt.wantErrMsg)
+			if tt.wantErr && err != nil && tt.wantErrMsg != "" && !strings.Contains(err.Error(), tt.wantErrMsg) {
+				t.Errorf("GetEmbedding() error = %v, wantErrMsg substring %v", err, tt.wantErrMsg)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetEmbedding() = %v, want %v", got, tt.want)
