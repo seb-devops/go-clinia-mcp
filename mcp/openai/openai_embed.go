@@ -9,8 +9,26 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
+// Add an interface for dependency injection
+
+type EmbedderClient interface {
+	Post(ctx context.Context, path string, body interface{}, out interface{}) error
+}
+
+// Change OpenAIEmbedder to use the interface
+
 type OpenAIEmbedder struct {
-	client openai.Client
+	client EmbedderClient
+}
+
+// Adapter to match EmbedderClient interface
+
+type OpenAIClientAdapter struct {
+	client *openai.Client
+}
+
+func (a *OpenAIClientAdapter) Post(ctx context.Context, path string, body interface{}, out interface{}) error {
+	return a.client.Post(ctx, path, body, out)
 }
 
 func NewOpenAIEmbedder() (*OpenAIEmbedder, error) {
@@ -19,7 +37,8 @@ func NewOpenAIEmbedder() (*OpenAIEmbedder, error) {
 		return nil, errors.New("OPENAI_API_KEY environment variable not set")
 	}
 	client := openai.NewClient(option.WithAPIKey(openaiKey))
-	return &OpenAIEmbedder{client: client}, nil
+	adapter := &OpenAIClientAdapter{client: &client}
+	return &OpenAIEmbedder{client: adapter}, nil
 }
 
 func (e *OpenAIEmbedder) GetEmbedding(query string) ([]float32, error) {
