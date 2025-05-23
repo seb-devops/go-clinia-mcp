@@ -9,19 +9,13 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
-// Add an interface for dependency injection
-
 type EmbedderClient interface {
 	Post(ctx context.Context, path string, body interface{}, out interface{}) error
 }
 
-// Change OpenAIEmbedder to use the interface
-
 type OpenAIEmbedder struct {
 	client EmbedderClient
 }
-
-// Adapter to match EmbedderClient interface
 
 type OpenAIClientAdapter struct {
 	client *openai.Client
