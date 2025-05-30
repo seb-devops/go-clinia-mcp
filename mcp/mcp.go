@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 
+	"clinia-doc/mcp/langchain"
 	"clinia-doc/mcp/openai"
+	"clinia-doc/mcp/services"
 	"clinia-doc/mcp/supabase"
 
 	"github.com/joho/godotenv"
@@ -48,15 +50,24 @@ func setupServerAndTools() (*server.SSEServer, error) {
 		server.WithRecovery(),
 	)
 
-	// Supabase client
+	// Initialize providers
+	openaiClient, err := openai.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("could not initialize openai client: %w", err)
+	}
+
 	supabaseClient, err := supabase.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize supabase client: %w", err)
 	}
 
-	openaiClient, err := openai.NewOpenAIEmbedder()
+	// Initialize service layer with dependency injection
+	searchService := services.NewSearchService(openaiClient, supabaseClient)
+
+	// LangChain decomposer
+	decomposer, err := langchain.NewQueryDecomposer()
 	if err != nil {
-		return nil, fmt.Errorf("could not initialize openai client: %w", err)
+		return nil, fmt.Errorf("could not initialize langchain decomposer: %w", err)
 	}
 
 	// Register your get_embedding tool
@@ -65,14 +76,20 @@ func setupServerAndTools() (*server.SSEServer, error) {
 		mcp.WithString("query", mcp.Required(), mcp.Description("Text to embed and search")),
 	)
 
-	s.AddTool(getEmbeddingTool, getEmbeddingHandler(supabaseClient, openaiClient))
+	decomposeQueryTool := mcp.NewTool("decompose_query",
+		mcp.WithDescription("Decompose a complex query into multiple subqueries using LangChain"),
+		mcp.WithString("query", mcp.Required(), mcp.Description("The complex query to decompose")),
+	)
+
+	s.AddTool(decomposeQueryTool, decomposeQueryHandler(decomposer))
+	s.AddTool(getEmbeddingTool, getEmbeddingHandler(searchService))
 
 	// Start the SSE server on :8080 using HTTP handler
 	sseServer := server.NewSSEServer(s, server.WithSSEEndpoint("/api/sse"))
 	return sseServer, nil
 }
 
-func getEmbeddingHandler(client *supabase.Client, openaiClient *openai.OpenAIEmbedder) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func getEmbeddingHandler(searchService *services.SearchService) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		log.Printf("Received get_embedding request with params: %v", request.Params.Arguments)
 		query, ok := request.Params.Arguments["query"].(string)
@@ -80,17 +97,33 @@ func getEmbeddingHandler(client *supabase.Client, openaiClient *openai.OpenAIEmb
 			return nil, errors.New("query must be a non-empty string")
 		}
 
-		embedding, err := openaiClient.GetEmbedding(query)
+		results, err := searchService.SearchByText(ctx, query, 10)
 		if err != nil {
-			log.Printf("OpenAI embedding error: %v", err)
-			return nil, fmt.Errorf("failed to get embedding from OpenAI: %w", err)
+			log.Printf("Search error: %v", err)
+			return nil, fmt.Errorf("failed to search: %w", err)
 		}
 
-		results, err := client.GetEmbedding(embedding, 10)
-
+		jsonBytes, err := json.Marshal(results)
 		if err != nil {
-			log.Printf("GetEmbedding error: %v", err)
-			return nil, fmt.Errorf("failed to get embedding: %w", err)
+			return nil, fmt.Errorf("failed to marshal results: %w", err)
+		}
+
+		return mcp.NewToolResultText(string(jsonBytes)), nil
+	}
+}
+
+func decomposeQueryHandler(decomposer *langchain.QueryDecomposer) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		log.Printf("Received decompose_query request with params: %v", request.Params.Arguments)
+		query, ok := request.Params.Arguments["query"].(string)
+		if !ok || query == "" {
+			return nil, errors.New("query must be a non-empty string")
+		}
+
+		results, err := decomposer.DecomposeQuery(ctx, query)
+		if err != nil {
+			log.Printf("Query decomposition error: %v", err)
+			return nil, fmt.Errorf("failed to decompose query: %w", err)
 		}
 
 		jsonBytes, err := json.Marshal(results)

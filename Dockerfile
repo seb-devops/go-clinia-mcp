@@ -3,10 +3,9 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-COPY mcp/ ./mcp/
-COPY mcp/supabase/ ./mcp/supabase/
+COPY . .
 WORKDIR /app/mcp
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/server .
 
 # Final stage: minimal image
 FROM scratch

@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-type mockClient struct {
+type mockHTTPClient struct {
 	postFunc func(ctx context.Context, path string, body interface{}, out interface{}) error
 }
 
-func (m *mockClient) Post(ctx context.Context, path string, body interface{}, out interface{}) error {
+func (m *mockHTTPClient) Post(ctx context.Context, path string, body interface{}, out interface{}) error {
 	return m.postFunc(ctx, path, body, out)
 }
 
@@ -24,7 +24,7 @@ type testCase struct {
 	wantErrMsg string
 }
 
-func TestOpenAIEmbedder_GetEmbedding(t *testing.T) {
+func TestClient_GetEmbedding(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "success",
@@ -71,8 +71,8 @@ func TestOpenAIEmbedder_GetEmbedding(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := &OpenAIEmbedder{client: &mockClient{postFunc: tt.postFunc}}
-			got, err := e.GetEmbedding(context.Background(), "test")
+			c := &Client{httpClient: &mockHTTPClient{postFunc: tt.postFunc}}
+			got, err := c.GetEmbedding(context.Background(), "test")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetEmbedding() error = %v, wantErr %v", err, tt.wantErr)
 			}

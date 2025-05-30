@@ -1,6 +1,8 @@
 package supabase
 
 import (
+	"clinia-doc/mcp/services"
+	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -19,16 +21,16 @@ type testFields struct {
 }
 
 type testArgs struct {
-	embedding  []float32
-	matchCount int
+	vector []float32
+	limit  int
 }
 
-func TestClientGetEmbedding(t *testing.T) {
+func TestClient_SearchByVector(t *testing.T) {
 	tests := []struct {
 		testname string
 		fields   testFields
 		args     testArgs
-		want     []MatchResult
+		want     []services.SearchResult
 		wantErr  bool
 	}{
 		{
@@ -36,14 +38,14 @@ func TestClientGetEmbedding(t *testing.T) {
 			fields: testFields{
 				supabase: &mockSupabaseClient{
 					rpcFunc: func(fn, mode string, params map[string]interface{}) string {
-						results := []MatchResult{{ID: 1, URL: "url", ChunkNumber: 1, Title: "title", Summary: "summary", Content: "content", Metadata: map[string]interface{}{"foo": "bar"}, Similarity: 0.99}}
+						results := []services.SearchResult{{ID: 1, URL: "url", ChunkNumber: 1, Title: "title", Summary: "summary", Content: "content", Metadata: map[string]interface{}{"foo": "bar"}, Similarity: 0.99}}
 						b, _ := json.Marshal(results)
 						return string(b)
 					},
 				},
 			},
-			args:    testArgs{embedding: []float32{1.0, 2.0}, matchCount: 1},
-			want:    []MatchResult{{ID: 1, URL: "url", ChunkNumber: 1, Title: "title", Summary: "summary", Content: "content", Metadata: map[string]interface{}{"foo": "bar"}, Similarity: 0.99}},
+			args:    testArgs{vector: []float32{1.0, 2.0}, limit: 1},
+			want:    []services.SearchResult{{ID: 1, URL: "url", ChunkNumber: 1, Title: "title", Summary: "summary", Content: "content", Metadata: map[string]interface{}{"foo": "bar"}, Similarity: 0.99}},
 			wantErr: false,
 		},
 		{
@@ -55,7 +57,7 @@ func TestClientGetEmbedding(t *testing.T) {
 					},
 				},
 			},
-			args:    testArgs{embedding: []float32{1.0, 2.0}, matchCount: 1},
+			args:    testArgs{vector: []float32{1.0, 2.0}, limit: 1},
 			want:    nil,
 			wantErr: true,
 		},
@@ -68,7 +70,7 @@ func TestClientGetEmbedding(t *testing.T) {
 					},
 				},
 			},
-			args:    testArgs{embedding: []float32{1.0, 2.0}, matchCount: 1},
+			args:    testArgs{vector: []float32{1.0, 2.0}, limit: 1},
 			want:    nil,
 			wantErr: true,
 		},
@@ -79,13 +81,13 @@ func TestClientGetEmbedding(t *testing.T) {
 			c := &Client{
 				supabase: tt.fields.supabase,
 			}
-			got, err := c.GetEmbedding(tt.args.embedding, tt.args.matchCount)
+			got, err := c.SearchByVector(context.Background(), tt.args.vector, tt.args.limit)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetEmbedding() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("SearchByVector() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetEmbedding() = %v, want %v", got, tt.want)
+				t.Errorf("SearchByVector() = %v, want %v", got, tt.want)
 			}
 		})
 	}

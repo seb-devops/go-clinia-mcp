@@ -1,38 +1,23 @@
 package supabase
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
-	"github.com/supabase-community/supabase-go"
+	"clinia-doc/mcp/services"
 
-	"clinia-doc/mcp/openai"
+	"github.com/supabase-community/supabase-go"
 )
 
 type SupabaseClient interface {
 	Rpc(fn, mode string, params map[string]interface{}) string
 }
 
-type Embedder interface {
-	GetEmbedding(query string) ([]float32, error)
-}
-
+// Client implements services.VectorSearchProvider interface
 type Client struct {
 	supabase SupabaseClient
-	embedder openai.OpenAIEmbedder
-}
-
-type MatchResult struct {
-	ID          int                    `json:"id"`
-	URL         string                 `json:"url"`
-	ChunkNumber int                    `json:"chunk_number"`
-	Title       string                 `json:"title"`
-	Summary     string                 `json:"summary"`
-	Content     string                 `json:"content"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	Similarity  float64                `json:"similarity"`
 }
 
 type SupabaseClientAdapter struct {
@@ -56,17 +41,18 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-func (c *Client) GetEmbedding(embedding []float32, matchCount int) ([]MatchResult, error) {
-	var results []MatchResult
+// SearchByVector implements services.VectorSearchProvider interface
+func (c *Client) SearchByVector(ctx context.Context, vector []float32, limit int) ([]services.SearchResult, error) {
+	var results []services.SearchResult
 
 	// Supabase Rpc returns a string, not an error
 	resStr := c.supabase.Rpc("match_site_pages", "exact", map[string]interface{}{
-		"query_embedding": embedding,
-		"match_count":     matchCount,
+		"query_embedding": vector,
+		"match_count":     limit,
 	})
 
 	if resStr == "" {
-		return nil, errors.New("no results returned")
+		return nil, fmt.Errorf("supabase rpc 'match_site_pages' returned empty response")
 	}
 
 	// Unmarshal the result string into results
@@ -75,4 +61,9 @@ func (c *Client) GetEmbedding(embedding []float32, matchCount int) ([]MatchResul
 	}
 
 	return results, nil
+}
+
+// Legacy method for backward compatibility - DEPRECATED: Use services.SearchService instead
+func (c *Client) GetEmbedding(embedding []float32, matchCount int) ([]services.SearchResult, error) {
+	return c.SearchByVector(context.Background(), embedding, matchCount)
 }
